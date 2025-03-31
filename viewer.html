@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Viewer</title>
+</head>
+<body>
+    <h1>Your key value is:</h1>
+    <p id="value">loading...</p>
+    <script>
+        const locationPath = window.location.pathname.split("/");
+        const key = locationPath[locationPath.length - 1];
+        async function fetchValue() {
+            try {
+            const response = await fetch(`/get/${key}`);
+            if (response.ok) {
+                const data = await response.text();
+                document.getElementById('value').innerText = data;
+            } else {
+                console.error('Failed to fetch value');
+            }
+            } catch (error) {
+            console.error('Error:', error);
+            }
+        }
+
+        fetchValue();
+        setInterval(fetchValue, 2000);
+    </script>
+</body>
+</html>
