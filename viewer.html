@@ -4,29 +4,43 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Viewer</title>
+    <!-- Thêm thư viện Socket.IO client -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.6.1/socket.io.min.js"></script>
 </head>
 <body>
     <h1>Your key value is:</h1>
     <p id="value">loading...</p>
     <script>
+        // Lấy key từ đường dẫn URL
         const locationPath = window.location.pathname.split("/");
         const key = locationPath[locationPath.length - 1];
-        async function fetchValue() {
-            try {
-            const response = await fetch(`/get/${key}`);
-            if (response.ok) {
-                const data = await response.text();
-                document.getElementById('value').innerText = data;
-            } else {
-                console.error('Failed to fetch value');
-            }
-            } catch (error) {
-            console.error('Error:', error);
-            }
-        }
-
-        fetchValue();
-        setInterval(fetchValue, 2000);
+        
+        // Khởi tạo kết nối Socket.IO
+        const socket = io();
+        
+        // Gửi key đến server ngay khi kết nối được thiết lập
+        socket.on('connect', () => {
+            console.log('Connected to server');
+            // Đăng ký theo dõi key này
+            socket.emit('subscribe', key);
+        });
+        
+        // Lắng nghe sự kiện khi có cập nhật giá trị của key
+        socket.on('value_update', (data) => {
+            document.getElementById('value').innerText = data;
+        });
+        
+        // Xử lý khi có lỗi kết nối
+        socket.on('connect_error', (error) => {
+            console.error('Connection error:', error);
+            document.getElementById('value').innerText = 'Connection error';
+        });
+        
+        // Xử lý khi mất kết nối
+        socket.on('disconnect', () => {
+            console.log('Disconnected from server');
+            document.getElementById('value').innerText = 'Disconnected - attempting to reconnect...';
+        });
     </script>
 </body>
 </html>
