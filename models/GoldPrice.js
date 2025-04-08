@@ -6,7 +6,11 @@ const goldPriceSchema = new mongoose.Schema(
             type: String,
             required: true,
         },
-        goldPrice: {
+        goldBuyPrice: {
+            type: String,
+            required: true,
+        },
+        goldSellPrice: {
             type: String,
             required: true,
         },
