@@ -4,7 +4,7 @@
 Dựng docker mongodb
 
 ```
-docker-compose up -d -build
+docker-compose up -d --build
 ```
 
 Thiết lập file .env từ .env.example

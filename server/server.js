@@ -6,7 +6,6 @@ const path = require("path");
 const http = require("http");
 const { Server } = require("socket.io");
 
-const lib = require("./utils");
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -117,15 +116,6 @@ app.delete("/gold-price/:id", async (req, res) => {
   }
 });
 
-app.get("/get/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
-    const value = await lib.view(id);
-    res.status(200).send(value);
-  } catch (err) {
-    res.send(err);
-  }
-});
 
 app.get("/viewer/:id", (req, res) => {
   const id = req.params.id;
