@@ -19,7 +19,8 @@ npm run dev
 ## **Mô tả db**
 1. GoldPrice
     - goldType: Loại vàng (SJC, PNJ, ...)
-    - goldPrice: Giá vàng (VND)
+    - goldBuyPrice: Giá mua vào (VND)
+    - goldSellPrice: Giá bán ra (VND)
     - timestamp: Thời gian giá vàng được ghi nhận
 
 
@@ -29,7 +30,8 @@ npm run dev
     - Thêm object vào db
     - Params:
         - goldType: Loại vàng (SJC, PNJ, ...)
-        - goldPrice: Giá vàng (VND)
+        - goldBuyPrice: Giá mua vào (VND)
+        - goldSellPrice: Giá bán ra (VND)
         - timestamp: Thời gian giá được ghi nhận
     
 2. /gold-price
