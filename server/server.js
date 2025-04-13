@@ -15,10 +15,26 @@ const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/cs4";
 
 const GoldPrice = require("./models/GoldPrice");
 
-mongoose
-  .connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+const mongoConnect = () => {
+  console.log("Attempting MongoDB connection...");
+  const timeout = 5000
+  mongoose
+    .connect(MONGO_URI)
+    .catch((err) => {
+      console.error("MongoDB connection error:");
+      console.log(`Retrying MongoDB connection in ${parseInt(timeout / 1000)} seconds...`);
+      setTimeout(mongoConnect, timeout);
+    });
+};
+
+mongoConnect();
+
+mongoose.connection.on("connected", () => console.log("MongoDB connected"));
+mongoose.connection.on("disconnected", () => {
+  console.error("MongoDB disconnected! Attempting to reconnect...");
+  mongoConnect();
+});
+mongoose.connection.on("reconnected", () => console.log("MongoDB reconnected"));
 
 app.use(bodyParser.json());
 

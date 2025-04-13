@@ -13,6 +13,7 @@ Chạy thôi
 
 ```
 npm install
+node import_data.js
 npm run dev
 ```
 
