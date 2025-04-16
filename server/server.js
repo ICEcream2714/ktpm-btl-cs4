@@ -61,12 +61,11 @@ app.use(bodyParser.json());
 
 
 app.post("/market-data", async (req, res) => {
-    const { goldType, goldBuyPrice, goldSellPrice, timestamp } = req.body;
+    const { dataType, dataPrice, timestamp } = req.body;
   
     const newMarketData = new MarketData({
-      goldType,
-      goldBuyPrice,
-      goldSellPrice,
+      dataType,
+      dataPrice,
       timestamp,
     });
   
