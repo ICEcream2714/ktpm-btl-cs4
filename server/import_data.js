@@ -1,7 +1,7 @@
 require("dotenv").config();
 const mongoose = require("mongoose");
 const fs = require("fs");
-const GoldPrice = require("./models/GoldPrice");
+const MarketData = require("./models/MarketData");
 const moment = require("moment");
 const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/cs4";
 
@@ -15,28 +15,32 @@ const connectDB = async () => {
   }
 };
 
-const importGoldPrices = async () => {
+const importMarketData = async () => {
   try {
-    const data = fs.readFileSync("gold_prices.json", "utf-8");
-    const goldPrices = JSON.parse(`[${data.trim().replace(/\n/g, ",")}]`);
+    await MarketData.deleteMany({});
+    console.log("All existing market data deleted");
 
-    const formattedGoldPrices = goldPrices.map((price) => ({
-      ...price,
-      timestamp: moment(price.timestamp, "DD/MM/YYYY HH:mm:ss").toDate(),
+    const data = fs.readFileSync("market_data.json", "utf-8");
+    const marketData = JSON.parse(`[${data.trim().replace(/\n/g, ",")}]`);
+
+    const formattedMarketData = marketData.map((data) => ({
+      dataType: data.dataType,
+      dataPrice: data.dataPrice,
+      timestamp: moment(data.timestamp, "DD/MM/YYYY HH:mm:ss").toDate(),
     }));
 
-    await GoldPrice.insertMany(formattedGoldPrices);
-    console.log("Gold prices imported successfully");
+    await MarketData.insertMany(formattedMarketData);
+    console.log("Market data imported successfully");
     process.exit();
   } catch (error) {
-    console.error("Error importing gold prices:", error);
+    console.error("Error importing market data:", error);
     process.exit(1);
   }
 };
 
 const run = async () => {
   await connectDB();
-  await importGoldPrices();
+  await importMarketData();
 };
 
 run();

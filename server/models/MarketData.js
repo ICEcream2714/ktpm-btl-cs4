@@ -1,16 +1,12 @@
 const mongoose = require("mongoose")
 
-const goldPriceSchema = new mongoose.Schema(
+const marketDataSchema = new mongoose.Schema(
     {
-        goldType: {
+        dataType: {
             type: String,
             required: true,
         },
-        goldBuyPrice: {
-            type: String,
-            required: true,
-        },
-        goldSellPrice: {
+        dataPrice: {
             type: String,
             required: true,
         },
@@ -23,6 +19,6 @@ const goldPriceSchema = new mongoose.Schema(
     { timestamps: true }
 )
 
-const GoldPrice = mongoose.model("GoldPrice", goldPriceSchema);
+const MarketData = mongoose.model("MarketData", marketDataSchema);
 
-module.exports = GoldPrice;
+module.exports = MarketData;
