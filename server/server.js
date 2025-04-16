@@ -41,7 +41,7 @@ app.post("/gold-price", async (req, res) => {
     }
   });
 
-  app.get("/gold-price", async (req, res) => {
+  app.get("/gold-price", async (req, res) => { 
     const { day, month, year } = req.query;
 
     try {
