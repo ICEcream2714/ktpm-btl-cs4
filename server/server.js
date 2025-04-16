@@ -78,7 +78,44 @@ app.post("/market-data", async (req, res) => {
     }
   });
 
-  app.get("/market-data", async (req, res) => {
+const getCachedMarketData = async (startOfDay, endOfDay) => {
+    const cacheKey = `market-data:${startOfDay.toISOString()}:${endOfDay.toISOString()}`;
+    const cachedData = await redisClient.get(cacheKey);
+
+    if (cachedData) {
+        console.log("Cache hit");
+        return JSON.parse(cachedData);
+    }
+
+    console.log("Cache miss");
+    const marketData = await MarketData.aggregate([
+        {
+            $match: { timestamp: { $lte: endOfDay } }
+        },
+        {
+            $sort: { timestamp: -1 }
+        },
+        {
+            $group: {
+                _id: "$dataType",
+                latestEntry: { $first: "$$ROOT" }
+            }
+        },
+        {
+            $replaceRoot: { newRoot: "$latestEntry" }
+        }
+    ]);
+
+    if (marketData.length > 0) {
+        await redisClient.set(cacheKey, JSON.stringify(marketData), {
+            EX: 3600 // Cache expires in 1 hour
+        });
+    }
+
+    return marketData;
+};
+
+app.get("/market-data", async (req, res) => {
     const { day, month, year } = req.query;
 
     try {
@@ -96,23 +133,7 @@ app.post("/market-data", async (req, res) => {
             endOfDay = new Date(historyYear, historyMonth, historyDay, 23, 59, 59, 999);
         }
 
-        const marketData = await MarketData.aggregate([
-            {
-                $match: { timestamp: { $lte: endOfDay } }
-            },
-            {
-                $sort: { timestamp: -1 }
-            },
-            {
-                $group: {
-                    _id: "$dataType",
-                    latestEntry: { $first: "$$ROOT" }
-                }
-            },
-            {
-                $replaceRoot: { newRoot: "$latestEntry" }
-            }
-        ]);
+        const marketData = await getCachedMarketData(startOfDay, endOfDay);
 
         if (marketData.length === 0) {
             return res.status(404).json({ message: "No market data found for the specified or nearest day" });
