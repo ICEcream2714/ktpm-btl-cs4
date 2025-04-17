@@ -13,36 +13,35 @@ Chạy thôi
 
 ```
 npm install
+node import_data.js
 npm run dev
 ```
 
 ## **Mô tả db**
-1. GoldPrice
-    - goldType: Loại vàng (SJC, PNJ, ...)
-    - goldBuyPrice: Giá mua vào (VND)
-    - goldSellPrice: Giá bán ra (VND)
-    - timestamp: Thời gian giá vàng được ghi nhận
+1. MarketData
+    - dataType: Loại dữ liệu (Vàng Mỹ, Bạc, Tỷ giá,...)
+    - dataPrice: Giá tiền (USD)
+    - timestamp: Thời gian giá được ghi nhận
 
 
 ## **Mô tả các API**
-1. /gold-price
+1. /market-data
     - Method: POST
     - Thêm object vào db
     - Params:
-        - goldType: Loại vàng (SJC, PNJ, ...)
-        - goldBuyPrice: Giá mua vào (VND)
-        - goldSellPrice: Giá bán ra (VND)
-        - timestamp: Thời gian giá được ghi nhận
+        - dataType
+        - dataPrice
+        - timestamp
     
-2. /gold-price
+2. /market-data
     - Method: GET
-    - Lấy các object theo ngày
+    - Lấy các object theo ngày gần nhất với query
     - Query: Mặc định hoặc thiếu 1 trong 3 params là lấy ngày hiện tại
         - day: Ngày
         - month: Tháng
         - year: Năm
 
-3. /gold-price/:id
+3. /market-data/:id
     - Method: DELETE
     - Xóa object bằng id
     - Params: 

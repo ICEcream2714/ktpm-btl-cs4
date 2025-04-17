@@ -1,11 +1,59 @@
-require("dotenv").config();
-const express = require("express");
-const mongoose = require("mongoose");
-const bodyParser = require("body-parser");
-const path = require("path");
-const http = require("http");
-const { Server } = require("socket.io");
+require("dotenv").config()
+const express = require("express")
+const mongoose = require("mongoose")
+const bodyParser = require("body-parser")
+const path = require("path")
+const http = require("http")
+const { Server } = require("socket.io")
+const redis = require("redis")
 
+const lib = require("./utils")
+const app = express()
+const server = http.createServer(app)
+const io = new Server(server)
+const port = process.env.PORT || 8080
+const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/cs4"
+
+const MarketData = require("./models/MarketData")
+
+const mongoConnect = () => {
+  console.log("Attempting MongoDB connection...")
+  const timeout = 5000
+  mongoose
+    .connect(MONGO_URI)
+    .catch((err) => {
+      console.error("MongoDB connection error:")
+      console.log(`Retrying MongoDB connection in ${parseInt(timeout / 1000)} seconds...`)
+      setTimeout(mongoConnect, timeout)
+    })
+}
+
+mongoConnect()
+mongoose.connection.on("connected", () => console.log("MongoDB connected"))
+mongoose.connection.on("disconnected", () => {
+  console.error("MongoDB disconnected! Attempting to reconnect...")
+  mongoConnect()
+})
+
+mongoose.connection.on("reconnected", () => console.log("MongoDB reconnected"))
+
+const redisClient = redis.createClient({
+  host: "cs4_redis",
+  port: 6379
+})
+
+const redisConnect = async () => {
+  console.log("Attempting Redis connection...")
+  await redisClient.connect()
+  console.log("Connected to Redis. Flushing cache...")
+  await redisClient.flushAll()
+}
+
+redisConnect()
+redisClient.on("connect", () => console.log("Connected to Redis"))
+redisClient.on("ready", () => console.log("Redis is ready"))
+redisClient.on("error", (err) => console.error("Redis error:", err))
+redisClient.on("end", () => console.log("Redis connection closed"))
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -19,7 +67,7 @@ mongoose
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.error("MongoDB connection error:", err));
 
-app.use(bodyParser.json());
+app.use(bodyParser.json())
 
 // Store active socket connections by key
 const activeConnections = new Map();
@@ -82,94 +130,97 @@ function broadcastUpdate(key, data) {
   }
 }
 
-app.post("/gold-price", async (req, res) => {
-  const { goldType, goldBuyPrice, goldSellPrice, timestamp } = req.body;
+app.post("/market-data", async (req, res) => {
+    const { dataType, dataPrice, timestamp } = req.body
+  
+    const newMarketData = new MarketData({
+      dataType,
+      dataPrice,
+      timestamp,
+    })
+  
+    try {
+        const savedData = await newMarketData.save()
+        res.status(201).json(savedData)
+    } catch (err) {
+        res.status(400).json({ error: err.message })
+    }
+  })
 
-  const newGoldPrice = new GoldPrice({
-    goldType,
-    goldBuyPrice,
-    goldSellPrice,
-    timestamp,
-  });
+const getCachedMarketData = async (startOfDay, endOfDay) => {
+    const cacheKey = `market-data:${startOfDay.toISOString()}:${endOfDay.toISOString()}`
+    const cachedData = await redisClient.get(cacheKey)
 
-  try {
-    const savedPrice = await newGoldPrice.save();
-    
-    // Broadcast the update to clients watching this gold price
-    broadcastUpdate(savedPrice._id.toString(), JSON.stringify(savedPrice));
-    
-    res.status(201).json(savedPrice);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.get("/gold-price", async (req, res) => {
-  const { day, month, year } = req.query;
-
-  try {
-    let startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    let endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
-
-    if (day && month && year) {
-      const gold_history_day = parseInt(day, 10);
-      const gold_history_month = parseInt(month, 10) - 1;
-      const gold_history_year = parseInt(year, 10);
-
-      startOfDay = new Date(gold_history_year, gold_history_month, gold_history_day, 0, 0, 0, 0);
-      endOfDay = new Date(gold_history_year, gold_history_month, gold_history_day, 23, 59, 59, 999);
+    if (cachedData) {
+        console.log("Cache hit")
+        return JSON.parse(cachedData)
     }
 
-    let goldPrices = await GoldPrice.find({ timestamp: { $gte: startOfDay, $lte: endOfDay } }).sort({ timestamp: -1 });
+    console.log("Cache miss")
+    const marketData = await MarketData.aggregate([
+        {
+            $match: { timestamp: { $lte: endOfDay } }
+        },
+        {
+            $sort: { timestamp: -1 }
+        },
+        {
+            $group: {
+                _id: "$dataType",
+                latestEntry: { $first: "$$ROOT" }
+            }
+        },
+        {
+            $replaceRoot: { newRoot: "$latestEntry" }
+        }
+    ])
 
-    if (goldPrices.length === 0) {
-      const nearestEntryBefore = await GoldPrice.findOne({ timestamp: { $lt: startOfDay } }).sort({ timestamp: -1 });
-      const nearestEntryAfter = await GoldPrice.findOne({ timestamp: { $gt: endOfDay } }).sort({ timestamp: 1 });
-
-      let nearestEntry = null;
-
-      if (nearestEntryBefore && nearestEntryAfter) {
-        const diffBefore = Math.abs(startOfDay - nearestEntryBefore.timestamp);
-        const diffAfter = Math.abs(nearestEntryAfter.timestamp - startOfDay);
-        nearestEntry = diffBefore <= diffAfter ? nearestEntryBefore : nearestEntryAfter;
-      } else if (nearestEntryBefore) {
-        nearestEntry = nearestEntryBefore;
-      } else if (nearestEntryAfter) {
-        nearestEntry = nearestEntryAfter;
-      }
-
-      if (nearestEntry) {
-        const nearestDay = nearestEntry.timestamp;
-        const nearestStartOfDay = new Date(nearestDay);
-        nearestStartOfDay.setHours(0, 0, 0, 0);
-        const nearestEndOfDay = new Date(nearestDay);
-        nearestEndOfDay.setHours(23, 59, 59, 999);
-
-        goldPrices = await GoldPrice.find({
-          timestamp: { $gte: nearestStartOfDay, $lte: nearestEndOfDay },
-        }).sort({ timestamp: -1 });
-      }
+    if (marketData.length > 0) {
+        await redisClient.set(cacheKey, JSON.stringify(marketData), {
+            EX: 3600 // Cache expires in 1 hour
+        })
     }
 
-    if (goldPrices.length === 0) {
-      return res.status(404).json({ message: "No gold prices found for the specified or nearest day" });
+    return marketData
+}
+
+app.get("/market-data", async (req, res) => {
+    const { day, month, year } = req.query
+
+    try {
+        let startOfDay = new Date()
+        startOfDay.setHours(0, 0, 0, 0)
+        let endOfDay = new Date()
+        endOfDay.setHours(23, 59, 59, 999)
+
+        if (day && month && year) {
+            const historyDay = parseInt(day, 10)
+            const historyMonth = parseInt(month, 10) - 1
+            const historyYear = parseInt(year, 10)
+
+            startOfDay = new Date(historyYear, historyMonth, historyDay, 0, 0, 0, 0)
+            endOfDay = new Date(historyYear, historyMonth, historyDay, 23, 59, 59, 999)
+        }
+
+        const marketData = await getCachedMarketData(startOfDay, endOfDay)
+
+        if (marketData.length === 0) {
+            return res.status(404).json({ message: "No market data found for the specified or nearest day" })
+        }
+
+        res.status(200).json(marketData)
+    } catch (err) {
+        res.status(400).json({ error: err.message })
     }
+})
 
-    res.status(200).json(goldPrices);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-app.delete("/gold-price/:id", async (req, res) => {
-  const { id } = req.params;
+app.delete("/market-data/:id", async (req, res) => {
+  const { id } = req.params
   try {
-    const deletedPrice = await GoldPrice.findByIdAndDelete(id);
+    const deletedData = await MarketData.findByIdAndDelete(id)
 
-    if (!deletedPrice) {
-      return res.status(404).json({ message: "Gold price not found" });
+    if (!deletedData) {
+      return res.status(404).json({ message: "Market data not found" })
     }
 
     // Notify clients about the deletion
@@ -177,16 +228,16 @@ app.delete("/gold-price/:id", async (req, res) => {
 
     res
       .status(200)
-      .json({ message: "Gold price deleted successfully", deletedPrice });
+      .json({ message: "Market data deleted successfully", deletedData })
   } catch (err) {
-    res.send(err);
+    res.send(err)
   }
 });
 
 app.get("/viewer/:id", (req, res) => {
-  const id = req.params.id;
-  res.sendFile(path.join(__dirname, "viewer.html"));
-});
+  const id = req.params.id
+  res.sendFile(path.join(__dirname, "viewer.html"))
+})
 
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "viewer.html"));
