@@ -19,7 +19,10 @@ npm run dev
 
 ## **Mô tả db**
 1. MarketData
-    - dataType: Loại dữ liệu (Vàng Mỹ, Bạc, Tỷ giá,...)
+    - dataType: Loại dữ liệu. Có 15 loại, chia làm 3 topics:
+        - Currencies: EUR_USD, GBP_USD, USD_VND, BTC_USD, ETH_USD
+        - Energy: Brent, WTI, Gasoline RBOB, Gas, Heating Oil
+        - Metals: Gold, Silver, Copper, SJC, PNJ
     - dataPrice: Giá tiền (USD)
     - timestamp: Thời gian giá được ghi nhận
 
