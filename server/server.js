@@ -7,7 +7,6 @@ const http = require("http")
 const { Server } = require("socket.io")
 const redis = require("redis")
 
-const lib = require("./utils")
 const app = express()
 const server = http.createServer(app)
 const io = new Server(server)
@@ -54,18 +53,6 @@ redisClient.on("connect", () => console.log("Connected to Redis"))
 redisClient.on("ready", () => console.log("Redis is ready"))
 redisClient.on("error", (err) => console.error("Redis error:", err))
 redisClient.on("end", () => console.log("Redis connection closed"))
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server);
-const port = process.env.PORT || 8080;
-const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/cs4";
-
-const GoldPrice = require("./models/GoldPrice");
-
-mongoose
-  .connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.error("MongoDB connection error:", err));
 
 app.use(bodyParser.json())
 
@@ -90,12 +77,11 @@ io.on('connection', (socket) => {
     socket.key = key;
     
     // Send the current value for this key if available
-    // For example, if the key is a gold price ID, fetch and send the current data
     if (mongoose.Types.ObjectId.isValid(key)) {
-      GoldPrice.findById(key)
-        .then(goldPrice => {
-          if (goldPrice) {
-            socket.emit('value_update', JSON.stringify(goldPrice));
+      MarketData.findById(key)
+        .then(marketData => {
+          if (marketData) {
+            socket.emit('value_update', JSON.stringify(marketData));
           } else {
             socket.emit('value_update', 'No data found for this key');
           }
@@ -141,6 +127,10 @@ app.post("/market-data", async (req, res) => {
   
     try {
         const savedData = await newMarketData.save()
+
+        // Broadcast the update to clients watching this data
+        broadcastUpdate(savedData._id.toString(), JSON.stringify(savedData))
+
         res.status(201).json(savedData)
     } catch (err) {
         res.status(400).json({ error: err.message })
