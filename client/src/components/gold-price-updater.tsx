@@ -17,7 +17,7 @@ import {
   generateHistoricalData,
   simulateRealTimePrice,
 } from "@/lib/price-simulator";
-import type { GoldPriceData } from "@/lib/types"; 
+import type { GoldPriceData } from "@/lib/types";
 
 export default function GoldPriceUpdater() {
   const [currentPrice, setCurrentPrice] = useState<number>(1950.75);
