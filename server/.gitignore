@@ -3,3 +3,4 @@
 .gitattributes
 /mongodb/*
 .env
+/rabbitmq-data/*

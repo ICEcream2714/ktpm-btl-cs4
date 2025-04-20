@@ -112,15 +112,18 @@ export function MarketDataDashboard() {
                 (item) => item._id === latestItem._id
               );
 
+              let newData;
               if (existingItemIndex >= 0) {
                 // Update existing item
-                const newData = [...prevData];
+                newData = [...prevData];
                 newData[existingItemIndex] = latestItem;
-                return newData;
               } else {
                 // Add new item
-                return [latestItem, ...prevData];
+                newData = [latestItem, ...prevData];
               }
+
+              // Force re-rendering by creating a new array
+              return [...newData];
             });
 
             // Highlight the updated item
@@ -140,7 +143,7 @@ export function MarketDataDashboard() {
               const filteredData = prevData.filter(
                 (item) => item.dataType !== dataType
               );
-              // Add the new items
+              // Add the new items and return a new array to trigger a re-render
               return [...filteredData, ...items];
             });
           }
@@ -190,7 +193,7 @@ export function MarketDataDashboard() {
         <p className="text-amber-800">Live data from the Market Data API</p>
 
         {/* Socket connection indicator */}
-        {/*
+      {/*
         <div className="mt-2 flex items-center">
           <div
             className={`w-3 h-3 rounded-full mr-2 ${

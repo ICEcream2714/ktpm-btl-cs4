@@ -7,6 +7,7 @@ const http = require("http");
 const { Server } = require("socket.io");
 const redis = require("redis");
 const cors = require("cors"); // Add CORS package
+const rabbitmqLib = require("./lib/rabbitmq");
 
 const app = express();
 const server = http.createServer(app);
@@ -198,6 +199,9 @@ function broadcastTypeUpdate(dataType, item) {
 }
 
 app.post("/market-data", async (req, res) => {
+  console.log("\n------- MARKET DATA FLOW: HTTP REQUEST RECEIVED -------");
+  console.log(`Request body: ${JSON.stringify(req.body)}`);
+
   const { dataType, dataPrice, timestamp } = req.body;
 
   const newMarketData = new MarketData({
@@ -207,16 +211,64 @@ app.post("/market-data", async (req, res) => {
   });
 
   try {
+    // Step 1: Save to MongoDB
+    console.log("FLOW STEP 1: Saving data to MongoDB...");
+    const startSave = Date.now();
     const savedData = await newMarketData.save();
+    console.log(`✓ MongoDB save complete (${Date.now() - startSave}ms)`);
+    console.log(`✓ Document ID: ${savedData._id}`);
 
-    // Broadcast the update to clients watching this specific data item
+    // Step 2: PUBLISHER ROLE - Publish to RabbitMQ message broker
+    console.log(
+      "\nFLOW STEP 2: PUBLISHER sending messages to RabbitMQ broker..."
+    );
+
+    console.log(
+      `Publishing to MARKET_DATA_EXCHANGE with key: ${savedData._id}`
+    );
+    const startRabbitMQ1 = Date.now();
+    const publishResult1 = await rabbitmqLib.publishMarketDataUpdate(
+      savedData._id.toString(),
+      savedData
+    );
+    console.log(
+      `✓ PUBLISHER sent to market data exchange: ${
+        publishResult1 ? "success" : "failed"
+      } (${Date.now() - startRabbitMQ1}ms)\n`
+    );
+
+    console.log(
+      `\nPublishing to MARKET_DATA_TYPE_EXCHANGE with key: ${dataType}`
+    );
+    const startRabbitMQ2 = Date.now();
+    const publishResult2 = await rabbitmqLib.publishMarketDataTypeUpdate(
+      dataType,
+      savedData
+    );
+    console.log(
+      `✓ PUBLISHER sent to market data type exchange: ${
+        publishResult2 ? "success" : "failed"
+      } (${Date.now() - startRabbitMQ2}ms)`
+    );
+
+    // Step 3: Direct Socket.IO broadcasts (legacy approach, not using message broker)
+    console.log(
+      "\nFLOW STEP 3: Direct Socket.IO broadcasts (legacy approach)..."
+    );
+    console.log(
+      `Broadcasting via Socket.IO to ID: ${savedData._id.toString()}`
+    );
     broadcastUpdate(savedData._id.toString(), JSON.stringify(savedData));
 
-    // Also broadcast to clients watching this data type
+    console.log(`Broadcasting via Socket.IO to type: ${dataType}`);
     broadcastTypeUpdate(dataType, savedData);
+
+    console.log("\n✓ Market data flow complete - response sent to client");
+    console.log("---------------------------------------------------\n");
 
     res.status(201).json(savedData);
   } catch (err) {
+    console.error("❌ ERROR in market data flow:", err.message);
     res.status(400).json({ error: err.message });
   }
 });
@@ -382,7 +434,154 @@ app.get("/", (req, res) => {
 // Serve static files (if needed)
 app.use(express.static(path.join(__dirname, "public")));
 
-// Use server.listen instead of app.listen for Socket.IO
-server.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
-});
+// Replace with startup function that initializes everything in the correct order
+async function startServer() {
+  try {
+    // Connect to MongoDB (already done via mongoConnect())
+    // We don't need to connect to Redis here, as it's already connected above
+    // await redisConnect(); - REMOVED THIS LINE to avoid duplicate connections
+
+    // Connect to RabbitMQ
+    await rabbitmqLib.connect();
+
+    // After RabbitMQ is connected, set up consumers
+    setupRabbitMQConsumers();
+
+    // Start Express server
+    server.listen(port, () => {
+      console.log(`Server is running on port ${port}`);
+    });
+  } catch (err) {
+    console.error("Error starting server:", err);
+  }
+}
+
+// Function to set up RabbitMQ consumers
+function setupRabbitMQConsumers() {
+  // SUBSCRIBER ROLE - Subscribe to market data updates by ID
+  rabbitmqLib.subscribeToMarketDataUpdates((id, messageContent) => {
+    console.log("\n------- SUBSCRIBER ROLE: ID-BASED MESSAGE RECEIVED -------");
+    console.log(
+      `SUBSCRIBER received message from MARKET_DATA_EXCHANGE with routing key: ${id}`
+    );
+
+    try {
+      // Parse the message if it's a string
+      const startParse = Date.now();
+      const data =
+        typeof messageContent === "string"
+          ? JSON.parse(messageContent)
+          : messageContent;
+      console.log(
+        `✓ SUBSCRIBER parsed message content (${Date.now() - startParse}ms)`
+      );
+      console.log(
+        `✓ Message data: ${JSON.stringify(data).substring(0, 150)}...`
+      );
+
+      // Forward to Socket.IO clients - SUBSCRIBER becomes a PUBLISHER to Socket.IO
+      console.log(
+        `FLOW STEP: MESSAGE BROKER → SUBSCRIBER → Socket.IO (ID-based routing)`
+      );
+      console.log(
+        `SUBSCRIBER checking for active Socket.IO clients subscribed to ID: ${id}`
+      );
+
+      if (activeConnections.has(id)) {
+        const clients = activeConnections.get(id);
+        console.log(
+          `✓ Found ${clients.size} Socket.IO client(s) subscribed to ID: ${id}`
+        );
+
+        const startBroadcast = Date.now();
+        broadcastUpdate(id, JSON.stringify(data));
+        console.log(
+          `✓ SUBSCRIBER forwarded message to ${
+            clients.size
+          } Socket.IO client(s) (${Date.now() - startBroadcast}ms)`
+        );
+      } else {
+        console.log(`ℹ No Socket.IO clients subscribed to ID: ${id}`);
+      }
+
+      console.log(`------- END OF SUBSCRIBER FLOW (ID-BASED) -------\n`);
+    } catch (err) {
+      console.error("❌ Error processing message:", err);
+      console.error(
+        `Original message content: ${messageContent.substring(0, 150)}...`
+      );
+    }
+  });
+
+  // SUBSCRIBER ROLE - Subscribe to market data updates by type
+  rabbitmqLib.subscribeToMarketDataTypeUpdates((dataType, messageContent) => {
+    console.log(
+      "\n------- SUBSCRIBER ROLE: TYPE-BASED MESSAGE RECEIVED -------"
+    );
+    console.log(
+      `SUBSCRIBER received message from MARKET_DATA_TYPE_EXCHANGE with routing key: ${dataType}`
+    );
+
+    try {
+      // Parse the message if it's a string
+      const startParse = Date.now();
+      const data =
+        typeof messageContent === "string"
+          ? JSON.parse(messageContent)
+          : messageContent;
+      console.log(
+        `✓ SUBSCRIBER parsed message content (${Date.now() - startParse}ms)`
+      );
+      console.log(`✓ Message type: ${data.type}`);
+
+      if (data.item) {
+        console.log(
+          `✓ Single item update for ${dataType}, ID: ${data.item._id}`
+        );
+      } else if (data.items) {
+        console.log(
+          `✓ Bulk update with ${data.items.length} items for ${dataType}`
+        );
+      }
+
+      // Forward to Socket.IO clients - SUBSCRIBER becomes a PUBLISHER to Socket.IO
+      console.log(
+        `FLOW STEP: MESSAGE BROKER → SUBSCRIBER → Socket.IO (type-based routing)`
+      );
+      console.log(
+        `SUBSCRIBER checking for active Socket.IO clients subscribed to type: ${dataType}`
+      );
+
+      if (activeConnections.has(dataType)) {
+        const clients = activeConnections.get(dataType);
+        console.log(
+          `✓ Found ${clients.size} Socket.IO client(s) subscribed to type: ${dataType}`
+        );
+
+        const startBroadcast = Date.now();
+        clients.forEach((socketId) => {
+          io.to(socketId).emit("type_update", JSON.stringify(data));
+        });
+        console.log(
+          `✓ SUBSCRIBER forwarded message to ${
+            clients.size
+          } Socket.IO client(s) (${Date.now() - startBroadcast}ms)`
+        );
+      } else {
+        console.log(`ℹ No Socket.IO clients subscribed to type: ${dataType}`);
+      }
+
+      console.log(`------- END OF SUBSCRIBER FLOW (TYPE-BASED) -------\n`);
+    } catch (err) {
+      console.error("❌ Error parsing message:", err);
+      console.error(
+        `Original message content: ${messageContent.substring(0, 150)}...`
+      );
+    }
+  });
+
+  console.log("✓ RabbitMQ SUBSCRIBERS set up successfully");
+}
+
+// Start the server
+startServer();
