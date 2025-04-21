@@ -41,6 +41,7 @@ export function MarketDataDashboard() {
   const [realtimeUpdates, setRealtimeUpdates] = useState<
     Record<string, boolean>
   >({});
+  const hasFetchedData = useRef(false); // Track if data has been fetched
 
   // Store which data types we've subscribed to
   const subscribedTypes = useRef<Set<string>>(new Set());
@@ -154,7 +155,10 @@ export function MarketDataDashboard() {
 
   // Fetch data and set up socket connection on component mount
   useEffect(() => {
-    fetchMarketData();
+    if (!hasFetchedData.current) {
+      hasFetchedData.current = true; // Mark as fetched
+      fetchMarketData();
+    }
 
     // Set up socket status listener
     const removeStatusListener = socketManager.onStatusChange((status) => {
