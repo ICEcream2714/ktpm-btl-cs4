@@ -65,10 +65,11 @@ async function connect() {
     console.log("[MESSAGE BROKER] RabbitMQ channel created");
 
     // Setup exchanges - these are the routing mechanisms for publishers
-    await channel.assertExchange(MARKET_DATA_EXCHANGE, "direct", {
+    // Sử dụng topic exchange thay vì direct để hỗ trợ định tuyến linh hoạt với wildcard
+    await channel.assertExchange(MARKET_DATA_EXCHANGE, "topic", {
       durable: true,
     });
-    await channel.assertExchange(MARKET_DATA_TYPE_EXCHANGE, "direct", {
+    await channel.assertExchange(MARKET_DATA_TYPE_EXCHANGE, "topic", {
       durable: true,
     });
     console.log("[MESSAGE BROKER] RabbitMQ exchanges created");
@@ -79,11 +80,12 @@ async function connect() {
     console.log("[MESSAGE BROKER] RabbitMQ queues created");
 
     // Bind queues to exchanges - defines the routing rules
-    await channel.bindQueue(MARKET_DATA_QUEUE, MARKET_DATA_EXCHANGE, "");
+    // Sử dụng # làm wildcard để nhận tất cả tin nhắn, bất kể routing key
+    await channel.bindQueue(MARKET_DATA_QUEUE, MARKET_DATA_EXCHANGE, "#");
     await channel.bindQueue(
       MARKET_DATA_TYPE_QUEUE,
       MARKET_DATA_TYPE_EXCHANGE,
-      ""
+      "#"
     );
     console.log("[MESSAGE BROKER] RabbitMQ queues bound to exchanges");
 

@@ -183,26 +183,12 @@ function broadcastUpdate(key, data) {
   }
 }
 
-// New function to broadcast updates by data type
-function broadcastTypeUpdate(dataType, item) {
-  // Broadcast to clients subscribed to this data type
-  if (activeConnections.has(dataType)) {
-    const updateData = JSON.stringify({
-      type: dataType,
-      item: item,
-    });
-
-    activeConnections.get(dataType).forEach((socketId) => {
-      io.to(socketId).emit("type_update", updateData);
-    });
-  }
-}
-
 app.post("/market-data", async (req, res) => {
   console.log("\n------- MARKET DATA FLOW: HTTP REQUEST RECEIVED -------");
   console.log(`Request body: ${JSON.stringify(req.body)}`);
 
-  const { dataType, dataPrice, timestamp } = req.body;
+  const { dataType, dataPrice, timestamp, messageId, _benchmarkSent } =
+    req.body;
 
   const newMarketData = new MarketData({
     dataType,
@@ -218,11 +204,13 @@ app.post("/market-data", async (req, res) => {
     console.log(`✓ MongoDB save complete (${Date.now() - startSave}ms)`);
     console.log(`✓ Document ID: ${savedData._id}`);
 
-    // Step 2: PUBLISHER ROLE - Publish to RabbitMQ message broker
+    // Step 2: PUBLISHER ROLE - Publish to RabbitMQ message broker only
+    // No direct Socket.IO broadcasting - following pure pub/sub pattern
     console.log(
       "\nFLOW STEP 2: PUBLISHER sending messages to RabbitMQ broker..."
     );
 
+    // Publish to ID-based exchange
     console.log(
       `Publishing to MARKET_DATA_EXCHANGE with key: ${savedData._id}`
     );
@@ -234,11 +222,12 @@ app.post("/market-data", async (req, res) => {
     console.log(
       `✓ PUBLISHER sent to market data exchange: ${
         publishResult1 ? "success" : "failed"
-      } (${Date.now() - startRabbitMQ1}ms)\n`
+      } (${Date.now() - startRabbitMQ1}ms)`
     );
 
+    // Publish to type-based exchange
     console.log(
-      `\nPublishing to MARKET_DATA_TYPE_EXCHANGE with key: ${dataType}`
+      `Publishing to MARKET_DATA_TYPE_EXCHANGE with key: ${dataType}`
     );
     const startRabbitMQ2 = Date.now();
     const publishResult2 = await rabbitmqLib.publishMarketDataTypeUpdate(
@@ -250,18 +239,7 @@ app.post("/market-data", async (req, res) => {
         publishResult2 ? "success" : "failed"
       } (${Date.now() - startRabbitMQ2}ms)`
     );
-
-    // Step 3: Direct Socket.IO broadcasts (legacy approach, not using message broker)
-    console.log(
-      "\nFLOW STEP 3: Direct Socket.IO broadcasts (legacy approach)..."
-    );
-    console.log(
-      `Broadcasting via Socket.IO to ID: ${savedData._id.toString()}`
-    );
-    broadcastUpdate(savedData._id.toString(), JSON.stringify(savedData));
-
-    console.log(`Broadcasting via Socket.IO to type: ${dataType}`);
-    broadcastTypeUpdate(dataType, savedData);
+    
 
     console.log("\n✓ Market data flow complete - response sent to client");
     console.log("---------------------------------------------------\n");
@@ -411,14 +389,51 @@ app.delete("/market-data/:id", async (req, res) => {
       return res.status(404).json({ message: "Market data not found" });
     }
 
-    // Notify clients about the deletion
-    broadcastUpdate(id, JSON.stringify({ deleted: true, id }));
+    // PUBLISHER ROLE - Publish deletion event to RabbitMQ
+    console.log(
+      "\n------- MARKET DATA DELETION: PUBLISHING TO RABBITMQ -------"
+    );
+    console.log(`Publishing deletion event for ID: ${id}`);
+    const deletionEvent = {
+      deleted: true,
+      id,
+      dataType: deletedData.dataType,
+    };
 
-    res
-      .status(200)
-      .json({ message: "Market data deleted successfully", deletedData });
+    // Publish to ID-based exchange
+    const publishResult1 = await rabbitmqLib.publishMarketDataUpdate(
+      id,
+      deletionEvent
+    );
+    console.log(
+      `✓ PUBLISHER sent deletion event to market data exchange: ${
+        publishResult1 ? "success" : "failed"
+      }`
+    );
+
+    // Publish to type-based exchange to notify type subscribers
+    const publishResult2 = await rabbitmqLib.publishMarketDataTypeUpdate(
+      deletedData.dataType,
+      {
+        type: deletedData.dataType,
+        deleted: true,
+        item: { _id: id, dataType: deletedData.dataType },
+      }
+    );
+    console.log(
+      `✓ PUBLISHER sent deletion event to market data type exchange: ${
+        publishResult2 ? "success" : "failed"
+      }`
+    );
+    console.log("---------------------------------------------------\n");
+
+    res.status(200).json({
+      message: "Market data deleted successfully",
+      deletedData,
+    });
   } catch (err) {
-    res.send(err);
+    console.error("Error deleting market data:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
