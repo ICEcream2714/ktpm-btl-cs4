@@ -155,6 +155,7 @@ export function MarketDataDashboard() {
 
   // Fetch data and set up socket connection on component mount
   useEffect(() => {
+
     if (!hasFetchedData.current) {
       hasFetchedData.current = true; // Mark as fetched
       fetchMarketData();
@@ -163,11 +164,18 @@ export function MarketDataDashboard() {
     // Set up socket status listener
     const removeStatusListener = socketManager.onStatusChange((status) => {
       setSocketStatus(status);
+      // // Fetch data again when socket connects
+      // if (status === "connected") {
+      //   fetchMarketData();
+      // }
     });
+
+    // Fetch data initially
+    
 
     // Clean up on unmount
     return () => {
-      removeStatusListener();
+      removeStatusListener(); // Correctly remove the status listener
 
       // Unsubscribe from all socket subscriptions
       subscribedTypes.current.forEach((dataType) => {
@@ -175,7 +183,7 @@ export function MarketDataDashboard() {
       });
       subscribedTypes.current.clear();
     };
-  }, [fetchMarketData]);
+  }, [fetchMarketData]); // Ensure fetchMarketData is included in dependencies
 
   // Get unique data types and sort them alphabetically to maintain consistent order
   const dataTypes = Array.from(
@@ -197,7 +205,7 @@ export function MarketDataDashboard() {
         <p className="text-amber-800">Live data from the Market Data API</p>
 
         {/* Socket connection indicator */}
-      {/*
+      {/* 
         <div className="mt-2 flex items-center">
           <div
             className={`w-3 h-3 rounded-full mr-2 ${
