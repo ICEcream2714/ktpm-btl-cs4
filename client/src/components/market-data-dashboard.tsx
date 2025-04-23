@@ -139,14 +139,14 @@ export function MarketDataDashboard() {
             }, 3000);
           } else if (items && items.length > 0) {
             // This is an initial load or bulk update for the data type
-            setMarketData((prevData) => {
-              // Remove all existing items of this type
-              const filteredData = prevData.filter(
-                (item) => item.dataType !== dataType
-              );
-              // Add the new items and return a new array to trigger a re-render
-              return [...filteredData, ...items];
-            });
+            // setMarketData((prevData) => {
+            //   // Remove all existing items of this type
+            //   const filteredData = prevData.filter(
+            //     (item) => item.dataType !== dataType
+            //   );
+            //   // Add the new items and return a new array to trigger a re-render
+            //   return [...filteredData, ...items];
+            // });
           }
         });
       }
