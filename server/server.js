@@ -341,6 +341,7 @@ app.get("/market-data/all", async (req, res) => {
 
   try {
     let query = {};
+    let cacheKey = "market-data:all";
 
     // Apply date filters if provided
     if (day && month && year) {
@@ -368,17 +369,36 @@ app.get("/market-data/all", async (req, res) => {
       );
 
       query.timestamp = { $gte: startOfDay, $lte: endOfDay };
+      cacheKey += `:${startOfDay.toISOString()}:${endOfDay.toISOString()}`;
     }
 
     // Apply type filter if provided
     if (type) {
       query.dataType = type;
+      cacheKey += `:type:${type}`;
+    }
+
+    if (CACHE_ASIDE_ENABLED) {
+      const cachedData = await redisClient.get(cacheKey);
+
+      if (cachedData) {
+        console.log("Cache hit for /market-data/all");
+        return res.status(200).json(JSON.parse(cachedData));
+      }
+
+      console.log("Cache miss for /market-data/all");
     }
 
     // Get all market data entries, sorted by timestamp (newest first)
     const allMarketData = await MarketData.find(query)
       .sort({ timestamp: -1 })
       .limit(1000); // Limit to prevent excessive data transfer
+
+    if (CACHE_ASIDE_ENABLED && allMarketData.length > 0) {
+      await redisClient.set(cacheKey, JSON.stringify(allMarketData), {
+        EX: 3600, // Cache expires in 1 hour
+      });
+    }
 
     res.status(200).json(allMarketData);
   } catch (err) {
