@@ -24,6 +24,9 @@ const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/cs4";
 
 const MarketData = require("./models/MarketData");
 
+//Cache-aside toggle
+const CACHE_ASIDE_ENABLED = true
+
 // Apply CORS middleware to all routes
 app.use(
   cors({
@@ -253,14 +256,18 @@ app.post("/market-data", async (req, res) => {
 
 const getCachedMarketData = async (startOfDay, endOfDay) => {
   const cacheKey = `market-data:${startOfDay.toISOString()}:${endOfDay.toISOString()}`;
-  const cachedData = await redisClient.get(cacheKey);
 
-  if (cachedData) {
-    console.log("Cache hit");
-    return JSON.parse(cachedData);
+  if (CACHE_ASIDE_ENABLED) {
+    const cachedData = await redisClient.get(cacheKey);
+
+    if (cachedData) {
+      console.log("Cache hit");
+      return JSON.parse(cachedData);
+    }
+
+    console.log("Cache miss");
   }
 
-  console.log("Cache miss");
   const marketData = await MarketData.aggregate([
     {
       $match: { timestamp: { $lte: endOfDay } },
@@ -279,7 +286,7 @@ const getCachedMarketData = async (startOfDay, endOfDay) => {
     },
   ]);
 
-  if (marketData.length > 0) {
+  if (CACHE_ASIDE_ENABLED && marketData.length > 0) {
     await redisClient.set(cacheKey, JSON.stringify(marketData), {
       EX: 3600, // Cache expires in 1 hour
     });
@@ -387,6 +394,19 @@ app.delete("/market-data/:id", async (req, res) => {
 
     if (!deletedData) {
       return res.status(404).json({ message: "Market data not found" });
+    }
+
+    // Invalidate or update the cache
+    if (CACHE_ASIDE_ENABLED) {
+      console.log("Invalidating cache due to deletion...");
+      const startOfDay = new Date(deletedData.timestamp);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(deletedData.timestamp);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const cacheKey = `market-data:${startOfDay.toISOString()}:${endOfDay.toISOString()}`;
+      await redisClient.del(cacheKey);
+      console.log(`Cache invalidated for key: ${cacheKey}`);
     }
 
     // PUBLISHER ROLE - Publish deletion event to RabbitMQ
