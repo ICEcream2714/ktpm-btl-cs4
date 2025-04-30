@@ -2,7 +2,7 @@ const axios = require("axios"); // Thêm axios để thực hiện POST request
 const io = require("socket.io-client"); // Thêm socket.io-client để tạo client
 
 const SERVER_URL = "http://localhost:8080"; // URL của server
-const MAX_CLIENTS = 30; // Số lượng client tối đa
+const MAX_CLIENTS = 5 // Số lượng client tối đa
 const CLIENT_CREATION_INTERVAL_IN_MS = 1000; // Khoảng thời gian tạo client mới (ms)
 const EMIT_INTERVAL_IN_MS = 2000; // Khoảng thời gian gửi sự kiện từ client (ms)
 
@@ -28,7 +28,7 @@ const createClient = () => {
 
   socket.on("type_update", (data) => {
     const update = JSON.parse(data);
-    console.log("ok");
+    console.log("Received type_update:", update);
 
     if (calculate) {
       const latency = Date.now() - startTime; // Tính thời gian trễ
@@ -80,4 +80,4 @@ setTimeout(() => {
   } else {
     console.log("No latencies recorded.");
   }
-}, 70000);
+}, 20000);
