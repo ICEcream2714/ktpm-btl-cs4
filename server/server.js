@@ -8,6 +8,8 @@ const { Server } = require("socket.io");
 const redis = require("redis");
 const cors = require("cors"); // Add CORS package
 const rabbitmqLib = require("./lib/rabbitmq");
+const CircuitBreaker = require("opossum");
+
 let useRabbitMQ = true; // Set to false to disable RabbitMQ
 
 const app = express();
@@ -26,7 +28,7 @@ const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/cs4";
 const MarketData = require("./models/MarketData");
 
 //Cache-aside toggle
-const CACHE_ASIDE_ENABLED = true
+const CACHE_ASIDE_ENABLED = true;
 
 // Apply CORS middleware to all routes
 app.use(
@@ -37,23 +39,54 @@ app.use(
   })
 );
 
-const mongoConnect = () => {
+const mongoConnect = async () => {
   console.log("Attempting MongoDB connection...");
-  const timeout = 5000;
-  mongoose.connect(MONGO_URI).catch((err) => {
-    console.error("MongoDB connection error:");
-    console.log(
-      `Retrying MongoDB connection in ${parseInt(timeout / 1000)} seconds...`
-    );
-    setTimeout(mongoConnect, timeout);
+  try {
+    await mongoose.connect(MONGO_URI);
+    console.log("MongoDB connected");
+  } catch (err) {
+    console.error("MongoDB connection error:", err.message);
+    throw err; // Throw error to trigger Circuit Breaker
+  }
+};
+
+// Circuit Breaker options
+const circuitBreakerOptions = {
+  timeout: 5000, // Timeout for each attempt (in ms)
+  errorThresholdPercentage: 50, // Open circuit if 50% of requests fail
+  resetTimeout: 30000, // Wait 30 seconds before transitioning to half-open
+};
+
+// Create a Circuit Breaker for MongoDB connection
+const mongoCircuitBreaker = new CircuitBreaker(mongoConnect, circuitBreakerOptions);
+
+// Event listeners for Circuit Breaker
+mongoCircuitBreaker.on("open", () => {
+  console.warn("Circuit Breaker: OPEN - MongoDB connection attempts are blocked");
+});
+
+mongoCircuitBreaker.on("halfOpen", () => {
+  console.info("Circuit Breaker: HALF-OPEN - Testing MongoDB connection...");
+});
+
+mongoCircuitBreaker.on("close", () => {
+  console.info("Circuit Breaker: CLOSED - MongoDB connection restored");
+});
+
+// Retry logic with Circuit Breaker
+const retryMongoConnect = () => {
+  mongoCircuitBreaker.fire().catch((err) => {
+    console.error("MongoDB connection failed. Retrying in 5 seconds...");
+    setTimeout(retryMongoConnect, 5000); // Retry after 5 seconds
   });
 };
 
-mongoConnect();
-mongoose.connection.on("connected", () => console.log("MongoDB connected"));
+// Start the retry process
+retryMongoConnect();
+
 mongoose.connection.on("disconnected", () => {
   console.error("MongoDB disconnected! Attempting to reconnect...");
-  mongoConnect();
+  retryMongoConnect();
 });
 
 mongoose.connection.on("reconnected", () => console.log("MongoDB reconnected"));

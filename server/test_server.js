@@ -2,7 +2,7 @@ const axios = require("axios"); // Thêm axios để thực hiện POST request
 const io = require("socket.io-client"); // Thêm socket.io-client để tạo client
 
 const SERVER_URL = "http://localhost:8080"; // URL của server
-const MAX_CLIENTS = 30; // Số lượng client tối đa
+const MAX_CLIENTS = 3; // Số lượng client tối đa
 const CLIENT_CREATION_INTERVAL_IN_MS = 1000; // Khoảng thời gian tạo client mới (ms)
 const EMIT_INTERVAL_IN_MS = 2000; // Khoảng thời gian gửi sự kiện từ client (ms)
 
@@ -11,11 +11,12 @@ let latencies = []; // Mảng lưu trữ thời gian trễ
 let startTime = 0; // Thời gian bắt đầu POST request
 let clientCount = 0; // Số lượng client hiện tại
 let clientFirstReceived = 0; // Số lượng client đã nhận được thông báo đầu tiên
+let firstReceivedTimes = [];
 
 const createClient = () => {
   const transports = ["websocket"];
   const socket = io(SERVER_URL, { transports });
-
+  const subscribeStartTime = Date.now();
   setInterval(() => {
     socket.emit("client to server event");
   }, EMIT_INTERVAL_IN_MS);
@@ -35,6 +36,9 @@ const createClient = () => {
       latencies.push(latency); // Lưu vào mảng
       console.log(`Latency for client: ${latency} ms`);
     } else {
+      const firstReceivedTime = Date.now() - subscribeStartTime; // Tính thời gian nhận thông tin đầu tiên
+      firstReceivedTimes.push(firstReceivedTime); // Lưu vào mảng
+      console.log(`Client first received time: ${firstReceivedTime} ms`);
       clientFirstReceived++;
       console.log(`Client first received count: ${clientFirstReceived}`);
 
@@ -79,5 +83,16 @@ setTimeout(() => {
     console.log("Total clients received after post:", latencies.length);
   } else {
     console.log("No latencies recorded.");
+  }
+  if (firstReceivedTimes.length > 0) {
+    const averageFirstReceivedTime =
+      firstReceivedTimes.reduce((sum, time) => sum + time, 0) /
+      firstReceivedTimes.length;
+    console.log(
+      `Average first received time: ${averageFirstReceivedTime.toFixed(2)} ms`
+    );
+    console.log("Total clients received first:", firstReceivedTimes.length);
+  } else {
+    console.log("No first received times recorded.");
   }
 }, 70000);
