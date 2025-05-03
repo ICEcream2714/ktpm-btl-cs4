@@ -42,8 +42,12 @@ app.use(
 const mongoConnect = async () => {
   console.log("Attempting MongoDB connection...");
   try {
-    await mongoose.connect(MONGO_URI);
-    console.log("MongoDB connected");
+    await mongoose.connect(MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+    if (mongoose.connection.readyState === 1) {
+      console.log("MongoDB connected");
+    } else {
+      throw new Error("MongoDB connection failed");
+    }
   } catch (err) {
     console.error("MongoDB connection error:", err.message);
     throw err; // Throw error to trigger Circuit Breaker
@@ -54,11 +58,33 @@ const mongoConnect = async () => {
 const circuitBreakerOptions = {
   timeout: 5000, // Timeout for each attempt (in ms)
   errorThresholdPercentage: 50, // Open circuit if 50% of requests fail
-  resetTimeout: 30000, // Wait 30 seconds before transitioning to half-open
+  resetTimeout: 20000, // Wait 20 seconds before transitioning to half-open
 };
 
 // Create a Circuit Breaker for MongoDB connection
 const mongoCircuitBreaker = new CircuitBreaker(mongoConnect, circuitBreakerOptions);
+
+// Retry logic with Circuit Breaker
+let retryCount = 0;
+
+const retryMongoConnect = () => {
+  if (mongoCircuitBreaker.opened) {
+    console.warn("Circuit Breaker is OPEN. Skipping retry...");
+    return; // Không thực hiện retry nếu Circuit Breaker đang ở trạng thái "open"
+  }
+
+  if (retryCount < 3) {
+    retryCount++;
+    console.log(`Retry attempt ${retryCount}...`);
+    mongoCircuitBreaker.fire().catch((err) => {
+      console.error(`Retry ${retryCount} failed. Retrying in 5 seconds...`);
+      setTimeout(retryMongoConnect, 5000); // Retry sau 5 giây
+    });
+  } else {
+    console.error("Max retries reached. Circuit Breaker will OPEN.");
+    mongoCircuitBreaker.open(); // Mở Circuit Breaker sau 3 lần thất bại
+  }
+};
 
 // Event listeners for Circuit Breaker
 mongoCircuitBreaker.on("open", () => {
@@ -67,29 +93,30 @@ mongoCircuitBreaker.on("open", () => {
 
 mongoCircuitBreaker.on("halfOpen", () => {
   console.info("Circuit Breaker: HALF-OPEN - Testing MongoDB connection...");
+  // Retry once in half-open state
+  mongoCircuitBreaker.fire().catch((err) => {
+    console.error("Half-Open Test Failed. Circuit Breaker returning to OPEN state.");
+  });
 });
 
 mongoCircuitBreaker.on("close", () => {
   console.info("Circuit Breaker: CLOSED - MongoDB connection restored");
+  retryCount = 0; // Reset retry count when connection is restored
 });
-
-// Retry logic with Circuit Breaker
-const retryMongoConnect = () => {
-  mongoCircuitBreaker.fire().catch((err) => {
-    console.error("MongoDB connection failed. Retrying in 5 seconds...");
-    setTimeout(retryMongoConnect, 5000); // Retry after 5 seconds
-  });
-};
 
 // Start the retry process
 retryMongoConnect();
 
 mongoose.connection.on("disconnected", () => {
   console.error("MongoDB disconnected! Attempting to reconnect...");
+  retryCount = 0; // Reset retry count on disconnection
   retryMongoConnect();
 });
 
-mongoose.connection.on("reconnected", () => console.log("MongoDB reconnected"));
+mongoose.connection.on("reconnected", () => {
+  console.log("MongoDB reconnected");
+  retryCount = 0; // Reset retry count on successful reconnection
+});
 
 const redisClient = redis.createClient({
   host: "cs4_redis",
@@ -236,6 +263,26 @@ function broadcastTypeUpdate(dataType, savedData) {
   }
 }
 
+// Helper function for retry logic
+async function retryAsync(fn, retries = 3, delay = 1000) {
+  let attempt = 0;
+  while (attempt < retries) {
+    try {
+      return await fn();
+    } catch (err) {
+      attempt++;
+      console.error(`Attempt ${attempt} failed: ${err.message}`);
+      if (attempt < retries) {
+        console.log(`Retrying in ${delay}ms...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      } else {
+        console.error("Max retries reached. Operation failed.");
+        throw err; // Throw error after max retries
+      }
+    }
+  }
+}
+
 app.post("/market-data", async (req, res) => {
   console.log("\n------- MARKET DATA FLOW: HTTP REQUEST RECEIVED -------");
   console.log(`Request body: ${JSON.stringify(req.body)}`);
@@ -273,8 +320,7 @@ app.post("/market-data", async (req, res) => {
         savedData
       );
       console.log(
-        `✓ PUBLISHER sent to market data exchange: ${
-          publishResult1 ? "success" : "failed"
+        `✓ PUBLISHER sent to market data exchange: ${publishResult1 ? "success" : "failed"
         } (${Date.now() - startRabbitMQ1}ms)`
       );
 
@@ -283,13 +329,13 @@ app.post("/market-data", async (req, res) => {
         `Publishing to MARKET_DATA_TYPE_EXCHANGE with key: ${dataType}`
       );
       const startRabbitMQ2 = Date.now();
-      const publishResult2 = await rabbitmqLib.publishMarketDataTypeUpdate(
-        dataType,
-        savedData
+      const publishResult2 = await retryAsync(
+        () => rabbitmqLib.publishMarketDataTypeUpdate(dataType, savedData),
+        3, // Number of retries
+        2000 // Delay between retries in milliseconds
       );
       console.log(
-        `✓ PUBLISHER sent to market data type exchange: ${
-          publishResult2 ? "success" : "failed"
+        `✓ PUBLISHER sent to market data type exchange: ${publishResult2 ? "success" : "failed"
         } (${Date.now() - startRabbitMQ2}ms)`
       );
     } else {
@@ -502,8 +548,7 @@ app.delete("/market-data/:id", async (req, res) => {
         deletionEvent
       );
       console.log(
-        `✓ PUBLISHER sent deletion event to market data exchange: ${
-          publishResult1 ? "success" : "failed"
+        `✓ PUBLISHER sent deletion event to market data exchange: ${publishResult1 ? "success" : "failed"
         }`
       );
 
@@ -517,8 +562,7 @@ app.delete("/market-data/:id", async (req, res) => {
         }
       );
       console.log(
-        `✓ PUBLISHER sent deletion event to market data type exchange: ${
-          publishResult2 ? "success" : "failed"
+        `✓ PUBLISHER sent deletion event to market data type exchange: ${publishResult2 ? "success" : "failed"
         }`
       );
       console.log("---------------------------------------------------\n");
@@ -616,8 +660,7 @@ function setupRabbitMQConsumers() {
         const startBroadcast = Date.now();
         broadcastUpdate(id, JSON.stringify(data));
         console.log(
-          `✓ SUBSCRIBER forwarded message to ${
-            clients.size
+          `✓ SUBSCRIBER forwarded message to ${clients.size
           } Socket.IO client(s) (${Date.now() - startBroadcast}ms)`
         );
       } else {
@@ -683,8 +726,7 @@ function setupRabbitMQConsumers() {
           io.to(socketId).emit("type_update", JSON.stringify(data));
         });
         console.log(
-          `✓ SUBSCRIBER forwarded message to ${
-            clients.size
+          `✓ SUBSCRIBER forwarded message to ${clients.size
           } Socket.IO client(s) (${Date.now() - startBroadcast}ms)`
         );
       } else {

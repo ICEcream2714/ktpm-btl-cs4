@@ -1,89 +1,100 @@
-const axios = require("axios"); // Thêm axios để thực hiện POST request
-const io = require("socket.io-client"); // Thêm socket.io-client để tạo client
+const axios = require("axios");
+const io = require("socket.io-client");
 
-const SERVER_URL = "http://localhost:8080"; // URL của server
-const MAX_CLIENTS = 3; // Số lượng client tối đa
-const CLIENT_CREATION_INTERVAL_IN_MS = 1000; // Khoảng thời gian tạo client mới (ms)
-const EMIT_INTERVAL_IN_MS = 2000; // Khoảng thời gian gửi sự kiện từ client (ms)
+const SERVER_URL = "http://localhost:8080";
+const MAX_CLIENTS = 3;
+const CLIENT_CREATION_INTERVAL_IN_MS = 1000;
+const POST_INTERVAL_IN_MS = 5000;
 
-let calculate = false; // Biến kiểm soát việc tính toán
-let latencies = []; // Mảng lưu trữ thời gian trễ
-let startTime = 0; // Thời gian bắt đầu POST request
-let clientCount = 0; // Số lượng client hiện tại
-let clientFirstReceived = 0; // Số lượng client đã nhận được thông báo đầu tiên
+let clientCount = 0;
 let firstReceivedTimes = [];
+let updateLatencies = [];
+let postTimestamps = [];
+let postIntervalId = null; // Biến để lưu ID của setInterval POST
 
 const createClient = () => {
   const transports = ["websocket"];
   const socket = io(SERVER_URL, { transports });
-  const subscribeStartTime = Date.now();
-  setInterval(() => {
-    socket.emit("client to server event");
-  }, EMIT_INTERVAL_IN_MS);
 
-  socket.on("disconnect", (reason) => {
-    console.log(`disconnect due to ${reason}`);
+  socket.on("connect", () => {
+    console.log(`Client connected with ID: ${socket.id}`);
   });
 
+  const subscribeStartTime = Date.now();
   socket.emit("subscribe", "PNJ");
+  console.log(`Client ${socket.id} subscribed to PNJ`);
+
+  let firstReceived = false;
 
   socket.on("type_update", (data) => {
     const update = JSON.parse(data);
-    console.log("ok");
+    console.log(`Client ${socket.id} received type_update: ok`);
 
-    if (calculate) {
-      const latency = Date.now() - startTime; // Tính thời gian trễ
-      latencies.push(latency); // Lưu vào mảng
-      console.log(`Latency for client: ${latency} ms`);
-    } else {
-      const firstReceivedTime = Date.now() - subscribeStartTime; // Tính thời gian nhận thông tin đầu tiên
-      firstReceivedTimes.push(firstReceivedTime); // Lưu vào mảng
-      console.log(`Client first received time: ${firstReceivedTime} ms`);
-      clientFirstReceived++;
-      console.log(`Client first received count: ${clientFirstReceived}`);
+    const currentTime = Date.now();
 
-      // Khi tất cả các client đã nhận được thông báo đầu tiên, thực hiện POST request
-      if (clientFirstReceived === MAX_CLIENTS) {
-        performPostRequest();
-      }
+    // Tính thời gian nhận thông tin đầu tiên sau khi subscribe
+    if (!firstReceived) {
+      const firstReceivedTime = currentTime - subscribeStartTime;
+      firstReceivedTimes.push(firstReceivedTime);
+      console.log(
+        `Client ${socket.id} first received time: ${firstReceivedTime} ms`
+      );
+      firstReceived = true;
+    }
+
+    // Tính thời gian nhận thông tin sau mỗi POST
+    if (postTimestamps.length > 0) {
+      const lastPostTime = postTimestamps[postTimestamps.length - 1];
+      const latency = currentTime - lastPostTime;
+      updateLatencies.push(latency);
+      console.log(
+        `Client ${socket.id} latency for update after POST (${lastPostTime}): ${latency} ms`
+      );
     }
   });
 
+  socket.on("disconnect", (reason) => {
+    console.log(`Client ${socket.id} disconnected due to ${reason}`);
+  });
+
+  // Tạo client tiếp theo nếu chưa đạt MAX_CLIENTS
   if (++clientCount < MAX_CLIENTS) {
     setTimeout(createClient, CLIENT_CREATION_INTERVAL_IN_MS);
   }
 };
 
-const performPostRequest = async () => {
-  try {
-    console.log("Starting POST request...");
-    startTime = Date.now(); // Đánh dấu thời gian bắt đầu
-    const response = await axios.post(`${SERVER_URL}/market-data`, {
-      dataType: "PNJ",
-      dataPrice: 123223,
-      timestamp: new Date(),
-    });
+// Hàm thực hiện POST request định kỳ
+const startPosting = () => {
+  postIntervalId = setInterval(async () => {
+    try {
+      console.log("Starting POST request...");
+      const postTime = Date.now();
+      postTimestamps.push(postTime);
 
-    console.log("POST request successful:", response.data);
-    calculate = true; // Bật tính toán thời gian
-  } catch (err) {
-    console.error("Error during POST request:", err.message);
-    process.exit(1);
-  }
+      const randomPrice = Math.floor(Math.random() * 100000) + 100000;
+
+      const response = await axios.post(`${SERVER_URL}/market-data`, {
+        dataType: "PNJ",
+        dataPrice: randomPrice,
+        timestamp: new Date(),
+      });
+
+      console.log(`POST request successful at ${postTime}:`, response.data);
+    } catch (err) {
+      console.error("Error during POST request:", err.message);
+    }
+  }, POST_INTERVAL_IN_MS);
 };
 
-createClient();
-
-// Tính trung bình thời gian trễ sau khi POST request hoàn tất
+// Tính toán trung bình sau 60 giây và dừng POST
 setTimeout(() => {
-  if (latencies.length > 0) {
-    const averageLatency =
-      latencies.reduce((sum, latency) => sum + latency, 0) / latencies.length;
-    console.log(`Average latency: ${averageLatency.toFixed(2)} ms`);
-    console.log("Total clients received after post:", latencies.length);
-  } else {
-    console.log("No latencies recorded.");
+  // Dừng POST request
+  if (postIntervalId) {
+    clearInterval(postIntervalId);
+    console.log("Stopped POST requests.");
   }
+
+  // Tính toán thời gian nhận thông tin đầu tiên
   if (firstReceivedTimes.length > 0) {
     const averageFirstReceivedTime =
       firstReceivedTimes.reduce((sum, time) => sum + time, 0) /
@@ -95,4 +106,22 @@ setTimeout(() => {
   } else {
     console.log("No first received times recorded.");
   }
-}, 70000);
+
+  // Tính toán độ trễ cập nhật sau POST
+  if (updateLatencies.length > 0) {
+    const averageUpdateLatency =
+      updateLatencies.reduce((sum, latency) => sum + latency, 0) /
+      updateLatencies.length;
+    console.log(
+      `Average latency for updates after POST: ${averageUpdateLatency.toFixed(
+        2
+      )} ms`
+    );
+    console.log("Total updates received after POST:", updateLatencies.length);
+  } else {
+    console.log("No update latencies recorded.");
+  }
+}, 300000);
+
+createClient();
+startPosting();
