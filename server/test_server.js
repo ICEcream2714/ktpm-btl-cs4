@@ -2,8 +2,10 @@ const axios = require("axios");
 const io = require("socket.io-client");
 require("dotenv").config()
 
+
 const SERVER_URL = process.env.URL_ENDPOINT;
 const MAX_CLIENTS = 300;
+
 const CLIENT_CREATION_INTERVAL_IN_MS = 1000;
 const POST_INTERVAL_IN_MS = 5000;
 
@@ -16,14 +18,16 @@ let postIntervalId = null; // Biến để lưu ID của setInterval POST
 const createClient = () => {
   const transports = ["websocket"];
   const socket = io(SERVER_URL, { transports });
+  let subscribeStartTime;
 
   socket.on("connect", () => {
     console.log(`Client connected with ID: ${socket.id}`);
+    console.log(`Client ${socket.id} subscribed to PNJ`);
+    subscribeStartTime = Date.now();
+    socket.emit("subscribe", "PNJ");
   });
 
-  const subscribeStartTime = Date.now();
-  socket.emit("subscribe", "PNJ");
-  console.log(`Client ${socket.id} subscribed to PNJ`);
+  
 
   let firstReceived = false;
 

@@ -74,22 +74,21 @@ const retryMongoConnect = () => {
     return; // Không thực hiện retry nếu Circuit Breaker đang ở trạng thái "open"
   }
 
-  if (retryCount < 3) {
+  if (retryCount < 1) {
     retryCount++;
     console.log(`Retry attempt ${retryCount}...`);
     mongoCircuitBreaker.fire().catch((err) => {
-      console.error(`Retry ${retryCount} failed. Retrying in 5 seconds...`);
+      console.error(`Retry failed. Retrying in 5 seconds...`);
       setTimeout(retryMongoConnect, 5000); // Retry sau 5 giây
     });
   } else {
-    console.error("Max retries reached. Circuit Breaker will OPEN.");
     mongoCircuitBreaker.open(); // Mở Circuit Breaker sau 3 lần thất bại
   }
 };
 
 // Event listeners for Circuit Breaker
 mongoCircuitBreaker.on("open", () => {
-  console.warn("Circuit Breaker: OPEN - MongoDB connection attempts are blocked");
+  console.warn("Circuit Breaker: OPEN - MongoDB connection attempts are blocked for 20 seconds");
 });
 
 mongoCircuitBreaker.on("halfOpen", () => {
