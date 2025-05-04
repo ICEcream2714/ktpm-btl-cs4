@@ -1,6 +1,7 @@
 const axios = require("axios");
+require("dotenv").config()
 
-const SERVER_URL = "http://localhost:8080";
+const SERVER_URL = process.env.URL_ENDPOINT;
 const TEST_DURATION = 2 * 60 * 1000; // 7 minutes in milliseconds
 const MAX_CLIENTS = 30;
 const CLIENT_INTERVAL = 1000; // 1 second
@@ -22,7 +23,7 @@ const createClient = (id) => {
   // Start GET requests every 2 seconds
   client.intervalId = setInterval(async () => {
     try {
-      const response = await axios.get(`${SERVER_URL}/market-data`);
+      const response = await axios.get(`${SERVER_URL}/market-data`)
       const data = response.data;
 
       // Check for new data and calculate latency

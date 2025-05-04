@@ -1,8 +1,11 @@
 const axios = require("axios");
 const io = require("socket.io-client");
+require("dotenv").config()
 
-const SERVER_URL = "http://localhost:8080";
-const MAX_CLIENTS = 30;
+
+const SERVER_URL = process.env.URL_ENDPOINT;
+const MAX_CLIENTS = 300;
+
 const CLIENT_CREATION_INTERVAL_IN_MS = 1000;
 const POST_INTERVAL_IN_MS = 5000;
 
@@ -123,7 +126,9 @@ setTimeout(() => {
   } else {
     console.log("No update latencies recorded.");
   }
-}, 300000);
+
+  console.log("Total clients: ", MAX_CLIENTS)
+}, 480000);
 
 createClient();
 startPosting();
