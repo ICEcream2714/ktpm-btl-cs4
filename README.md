@@ -41,14 +41,9 @@ npm run dev
      - dataType
      - dataPrice
      - timestamp
-2. /market-data
-
+2. /market-data/all
    - Method: GET
-   - Lấy các object theo ngày gần nhất với query
-   - Query: Mặc định hoặc thiếu 1 trong 3 params là lấy ngày hiện tại
-     - day: Ngày
-     - month: Tháng
-     - year: Năm
+   - Với từng key, lấy 20 entries gần nhất với thời điểm hiện tại
 
 3. /market-data/:id
    - Method: DELETE
