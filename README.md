@@ -128,9 +128,9 @@ npm run dev
 
 ## **Thực nghiệm**
 1. Setup
-Để thực nghiệm một cách khách quan, chạy server và các thành phần liên quan của hệ thống và các giả lập clients trên 2 máy ảo khác nhau tạo bởi codespace:
-+ Server, Database, rabbitMQ, Cache: 4 core - 16GB RAM - 32GB.
-+ Clients: 2 core - 8GB RAM - 32GB.
+Để thực nghiệm một cách khách quan, chạy server và các thành phần liên quan của hệ thống và các giả lập clients trên 2 máy ảo khác nhau tạo bởi Github Codespaces:
++ Server, Database, rabbitMQ, Cache: CPU 4 core - 16GB RAM - 32GB Hard drive.
++ Clients: CPU 2 core - 8GB RAM - 32GB Hard drive.
 ![alt text](config.png)
 
 2. Kịch bản và kết quả thực nghiệm.
