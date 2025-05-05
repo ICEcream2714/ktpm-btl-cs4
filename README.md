@@ -1,26 +1,23 @@
 # Report KTPM
 ## **Setup**
 1. Server
-
-cd server
-
-docker-compose up -d --build
+<pre>
+   cd server
+   docker-compose up -d --build
+</pre>
 
 Thiết lập file .env từ .env.example
-
-npm install
-
-node import_data.js
-
-npm run dev
-
+<pre>
+   npm install
+   node import_data.js
+   npm run dev
+</pre>
 2. Client
-
-cd client
-
-npm install
-
-npm run dev
+<pre>
+   cd client
+   npm install
+   npm run dev
+</pre>
 
 ## **Mô tả db**
 
