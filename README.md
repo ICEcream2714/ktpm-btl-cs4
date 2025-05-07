@@ -140,7 +140,7 @@ Giao diện client được thiết kế với tông màu phù hợp với các 
 ## **Tổng quan kiến trúc của hệ thống**
 
                          +------------+     +------------+     +------------+
-                         |  Client 1  |     |  Client 2  | ... |  Client 3  |
+                         |  Client 1  |     |  Client 2  | ... |  Client M  |
                          +------------+     +------------+     +------------+
                                ▲                   ▲                  ▲
                                │                   │                  │
@@ -172,6 +172,8 @@ Giao diện client được thiết kế với tông màu phù hợp với các 
                            |    Database    |               |     Cache      |
                            |    (mongoDB)   |               |    (Redis)     |
                            +----------------+               +----------------+
+
+Tổng kết các pattern đã cài đặt: **Publisher/ Subcriber; Cache-aside ; Queue-Based Load Leveling ; Retry ; Circuit Breaker**.
 
 ## **Thực nghiệm**
 
