@@ -1,12 +1,12 @@
 # Report KTPM
 
-## ** Thông tin thành viên nhóm**
+## **Thông tin thành viên nhóm**
    - Nguyễn Trần Công Hoàng - 22028087
    - Nguyễn Hữu Đức - 22028184
    - Ngô Duy Hiếu - 22028280
 ## **Setup**
 
-1. Server
+1. **Server**
 <pre>
    cd server
    docker-compose up -d --build
@@ -20,7 +20,7 @@ Thiết lập file .env từ .env.example
    npm run dev
 </pre>
 
-2. Client
+2. **Client**
 <pre>
    cd client
    npm install
@@ -29,7 +29,7 @@ Thiết lập file .env từ .env.example
 
 ## **Mô tả db**
 
-1. MarketData
+1. **MarketData**
    - dataType: Loại dữ liệu. Có 15 loại, chia làm 3 topics:
      - Currencies: EUR_USD, GBP_USD, USD_VND, BTC_USD, ETH_USD
      - Energy: Brent, WTI, Gasoline RBOB, Gas, Heating Oil
@@ -39,19 +39,19 @@ Thiết lập file .env từ .env.example
 
 ## **Mô tả các API**
 
-1. /market-data
+1. **/market-data**
    - Method: POST
    - Thêm object vào db
    - Params:
      - dataType
      - dataPrice
      - timestamp
-2. /market-data/all
 
+2. **/market-data/all**
    - Method: GET
    - Với từng key, lấy 20 entries gần nhất với thời điểm hiện tại
 
-3. /market-data/:id
+3. **/market-data/:id**
    - Method: DELETE
    - Xóa object bằng id
    - Params:
@@ -95,7 +95,7 @@ Giao diện client được thiết kế với tông màu phù hợp với các 
 
 ## **Các thuộc tính chất lượng - Các vấn đề liên quan - các pattern đã áp dụng để cải thiện**
 
-1. Performance
+1. **Performance**
 
 - Vấn đề 1: Kiến trúc ban đầu yêu cầu client phải chủ động gửi yêu cầu (poll) đến server định kỳ (mỗi 2 giây) để kiểm tra và lấy dữ liệu giá vàng mới nhất. Điều này dẫn đến độ trễ đáng kể từ thời điểm giá thay đổi trên server đến khi client nhận được, không đáp ứng yêu cầu cập nhật tức thời (real-time). Đồng thời, việc polling liên tục tạo ra lưu lượng mạng và tải xử lý không cần thiết trên cả client, server và database ngay cả khi không có dữ liệu mới.
    - -> Áp dụng pattern publisher/Subcriber: Khi có sự thay đổi về giá vàng, thay vì chờ client hỏi, Publisher là server chủ động gửi (publish) một tin nhắn chứa thông tin giá mới đến message broker là RabbitMQ, đồng thời cập nhật vào database. Message broker lúc này đóng vai trò trung gian, đưa các tin nhắn đến các socket đang lắng nghe đến các topic tương ứng. Với mỗi client sẽ có một socket (sử dụng socket.io client) để subscribe đến các topic là các queue trên rabbitMQ.
@@ -107,7 +107,7 @@ Giao diện client được thiết kế với tông màu phù hợp với các 
    - -> Áp dụng pattern cache aside: xây dựng một cache của database bằng Redis, các data về các chủ đề hot nhiều người truy cập sẽ được lưu vào trong cache; khi post thông tin mới thì data sẽ được cập nhật ở cả database và cache.
    - => Với việc áp dụng này khi clients mới subcribe thì sẽ nhận được giá gần nhất của topic một cách nhanh nhất thông qua cache nếu chủ đề đó đang hot và đã được lưu vào cache.
 
-2. Scalibility
+2. **Scalibility**
 
 - Vấn đề 3: Trong kiến trúc polling, với số lượng lớn client cùng truy vấn định kỳ (mỗi 2s), Database ( MongoDB) phải xử lý một lượng lớn yêu cầu đọc đồng thời, dễ dẫn đến quá tải, giảm hiệu năng và có nguy cơ sập. Server cũng phải tốn tài nguyên để xử lý hàng loạt request HTTP và truy vấn DB này.
    - -> Áp dụng pattern publisher/subcriber: cách áp dụng đã trình bày ở vấn đề 1
@@ -120,7 +120,7 @@ Giao diện client được thiết kế với tông màu phù hợp với các 
    - -> Áp dụng pattern Queue-Based Load Leveling: để tạo một hàng đợi xử lý lần lượt các yêu cầu post từ server, Queue được cài đặt bằng rabbitMQ, khi không có socket nào sẵn sàng nhận được thông tin thì message vẫn được lưu trong queue.
    - => Với việc áp dụng trên thì: dù các yêu cầu của server có thể liên tục gửi đến rabbitMQ, nhiều socket đăng ký các topic của rabbitMQ thì sẽ tránh sự tắc nghẽn dẫn đến một số yêu cầu bị miss không thực hiện được.
 
-3. Avaiability
+3. **Avaiability**
 
 - Vấn đề 5: Trong quá trình hoạt động, các kết nối mạng đến Database hoặc RabbitMQ có thể gặp lỗi tạm thời (transient failures) như mất gói tin, timeout ngắn, dịch vụ tạm thời không phản hồi do tải cao đột ngột. Nếu không xử lý, các lỗi này sẽ làm gián đoạn luồng cập nhật dữ liệu.
    - -> Áp dụng pattern Retry: trước hết xác định các kết nối quan trọng là kết nối đến database và rabbitMQ của server; Bọc các thao tác này trong một logic thử lại, khi thao tác thất bại với một lỗi được xác định là có thể thử lại ( TimeoutError, ConnectionError) thì sẽ thực hiện chờ 3s sau đó thực hiện lại thao tác; kết thúc sau 3 lần gọi retry.
@@ -171,14 +171,14 @@ Giao diện client được thiết kế với tông màu phù hợp với các 
 
 ## **Thực nghiệm**
 
-1. Setup
+1. **Setup**
    Để thực nghiệm một cách khách quan, chạy server và các thành phần liên quan của hệ thống và các giả lập clients trên 2 máy ảo khác nhau tạo bởi Github Codespaces:
 
    - Server, Database, rabbitMQ, Cache: CPU 4 core - 16GB RAM - 32GB Hard drive.
    - Clients: CPU 2 core - 8GB RAM - 32GB Hard drive.
    ![alt text](config.png)
 
-2. Kịch bản và kết quả thực nghiệm.
+2. **Kịch bản và kết quả thực nghiệm**
 
 - Hệ thống cũ:
 
@@ -187,8 +187,9 @@ Giao diện client được thiết kế với tông màu phù hợp với các 
    * kết quả thực nghiệm cho kịch bản 1:
    ![alt text](test_old_server.png)
 
-   * kịch bản kiểm thử 2: tương tự như kịch bản 1 tuy nhiên cài tạo ra các lỗi khiến cho Database không hoạt động.
+   * Kịch bản kiểm thử 2: tương tự như kịch bản 1 tuy nhiên cài tạo ra các lỗi khiến cho Database không hoạt động.
    * Kết quả thực nghiệm cho kịch bản 2:
+
    ![alt text](test_old_server.png)
 
 - Hệ thống mới:
@@ -196,31 +197,31 @@ Giao diện client được thiết kế với tông màu phù hợp với các 
    * Hệ thống cài đầy đủ các pattern đã trình bày và theo kiến trúc đã vẽ trong phần tổng quan.
 
    * Kịch bản kiểm thử 1: tương tự như kiểm thử hệ thống cũ, sẽ tiến hành giả lập 300 clients tuy nhiên được cài socket.io client để subcribe với message broker; Cứ 1s lại tạo thêm 1 client mới subcribe vào các topic; Cứ 5s thì server sẽ post hay publish dữ liệu mới; các thông tin đo được khi 8p thực nghiệm kết thúc: Trung bình đỗ trễ kể từ khi dữ liệu được post đến khi các subcribers nhận được dữ liệu đó, độ trễ kể từ khi lần đầu clients đó subcribe đến khi nhận được thông tin hiện tại lần đầu tiên, số lần nhận dữ liệu của các clients, số lượng clients đã subcribe.
-   * kết quả thực nghiệm cho kịch bản 1 khi chưa dùng Cache-aside:
+   * Kết quả thực nghiệm cho kịch bản 1 khi chưa dùng Cache-aside:
    ![alt text](test_server_non_cache.png)
-   * kết quả thực nghiệm cho kịch bản 1 khi đã dùng Cache-aside:
+   * Kết quả thực nghiệm cho kịch bản 1 khi đã dùng Cache-aside:
    ![alt text](test_server_cache.png)
 
    * Kịch bản kiểm thử 2: Tương tự như hệ thống cũ tuy nhiên sẽ tạo ra các lỗi khiến cho database và rabbitMQ để xem phản ứng của hệ thống.
 
-   * Kết quả thực nghiệm cho kịch bản 2 cho thấy tác dụng của Retry Patter:
+   * Kết quả thực nghiệm cho kịch bản 2 cho thấy tác dụng của Retry Pattern:
    ![alt text](retry.jpg)
    * Kết quả thực nghiệm cho kịch bản 2 cho thấy tác dụng của Circuit broker:
    ![alt text](circuit_broker.jpg)
 
-3. Nhận xét về các pattern đã được áp dụng dựa trên kết quả thực nghiệm
+3. **Nhận xét về các pattern đã được áp dụng dựa trên kết quả thực nghiệm**
 
 - Về kết quả của thực nghiệm 1 cho thấy:
 
-   * về performance:
+   * Về performance:
       - Có thể thấy sau khi **sử dụng socket.io và message broker là RabbitMQ của pattern publisher và subcriber** thì **độ trễ trung bình** của các clients kể từ lúc có dữ liệu mới đến khi nhận được là **từ 150ms đến 198ms so với 7s ở phía hệ thống cũ**. Ở hệ thống cũ lúc đầu khi có ít người dùng thì độ trễ vẫn còn nhỏ, tuy nhiên khi đạt 300 người dùng thì độ trễ rất lớn. Ở hệ thống mới khi đạt 300 người dùng thì độ trễ vẫn không quá cách biệt so với độ trễ trung bình
       - Có thể thấy được sau khi sử dụng **Cache-aside** thì thời gian trung bình các clients vừa subcribe thành công và nhận được dữ liệu hiện tại là **8ms so với 82ms** khi không sử dụng Cache-aside
 
-   * về scalability: 
+   * Về scalability: 
       - Có thể thấy trong cùng một khoảng thời gian và số lượng client thì **số lần các clients nhận dữ liệu realtime trong hệ thống mới là gần 19948 và 19946 tiệm cận số yêu cầu nhận được lý tưởng là 19950** (do chạy trong 8p, 5s post 1 lần, 0->300 clients mỗi giây thêm 1 clients) so với **12535 dữ liệu nhận được của các client ở hệ thống cũ ( có những client không nhận đủ response)**. Điều này là do **pattern Queue-Based Load Leveling** giúp đảm bảo không bị mất các message từ các lần post cũng như việc thực hiện **pattern publisher/subcriber** khiến cho server cũng như database không bị quá tải khi có quá nhiều clients. Khi thực nghiệm trên hệ thống cũ tài nguyên Cpu và ram tốn hơn rõ rệt so với hệ thống mới, đôi khi database có thể sập do quá nhiều truy vấn.
 
 - Về kết quả của thực nghiệm 2 cho thấy:
 
-   * về avaiablility: 
+   * Về avaiablility: 
       - Ở **hệ thống cũ ngừng hoạt động không phục hồi** khi có lỗi xảy ra đến các thành phần liên quan bị lỗi, ngay cả khi các thành phần phục hồi sau đó.
       - Ở **hệ thông mới** có thể thấy sau khi rabbitMQ bị lỗi về từ chối phục vụ server trong một khảng thời gian ngắn, **server đã tiến hành kết nối lại với rabbitMQ vài lần sau mỗi 5s và đã thành công kết nối lại**, hệ thống hoạt động bình thường đây là kết quả của việc áp dụng **Retry pattern**. Sau khi MongoDB bị lỗi trong một khoảng thời gian khá dài thì ban đầu server thực hiện retry 3 lần tuy nhiên đều thất bại lúc này **Circuit Broker** chuyển sang trạng thái **mở mạch (Open)** và không thử kết nối lại trong vòng 20s. Khi kết thúc 20s Circuit Broker chuyển sang trạng thái **nửa mở mạch (Half-open)** để thử kết nối lại một lần nếu thật bại sẽ lại quay về Open. Sau một khoảng thời gian chuyển đổi giữa các trạng thái Open và Half-open thì **Mongo phục hồi Half-open thành công kết nối** và Circuit Broker chuyển sang trạng thái **đóng mạch (close)**, **hệ thống sau đó hoạt động bình thường**.
