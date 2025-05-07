@@ -3,8 +3,8 @@ require("dotenv").config()
 
 // Use a default URL if URL_ENDPOINT is not defined in .env
 const SERVER_URL = process.env.URL_ENDPOINT || "http://localhost:8080";
-const TEST_DURATION = 2 * 60 * 1000; // 8 minutes in milliseconds
-const MAX_CLIENTS = 30;
+const TEST_DURATION = 8 * 60 * 1000; // 8 minutes in milliseconds
+const MAX_CLIENTS = 300;
 const CLIENT_INTERVAL = 1000; // 1 second
 const GET_INTERVAL = 2000; // 2 seconds
 const POST_INTERVAL = 5000; // 5 seconds
