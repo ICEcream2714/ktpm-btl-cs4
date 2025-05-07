@@ -189,7 +189,7 @@ Giao diện client được thiết kế với tông màu phù hợp với các 
 
    * kịch bản kiểm thử 2: tương tự như kịch bản 1 tuy nhiên cài tạo ra các lỗi khiến cho Database không hoạt động.
    * Kết quả thực nghiệm cho kịch bản 2:
-   ![alt text](test_old_server.png)
+   ![alt text](test_old_server2.png)
 
 - Hệ thống mới:
 
