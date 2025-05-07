@@ -190,7 +190,7 @@ Tổng kết các pattern đã cài đặt: **Publisher/ Subcriber; Cache-aside 
 
   - Một old_server có các api giống với api ban đầu của project và có kết nối với mongoDB không cài thêm pattern nào.
   - Kịch bản kiểm thử 1: Chạy giả lập tạo 300 clients để request đến server; cứ 1s lại tạo 1 client mới; server sẽ thực hiện post dữ liệu mới 5s một lần; client sau khi được tạo thì 2s lại poll thông tin từ server về 1 lần; các thông tin đo sau khi 8p thực nghiệm kết thúc: trung bình độ trễ của các lần nhận được dữ liệu mới kể từ lần post gần nhất từ khi thực hiện request, số lượng response mà các clients nhận được, số lượng clients.
-  - kết quả thực nghiệm cho kịch bản 1:
+  - Kết quả thực nghiệm cho kịch bản 1:
     ![alt text](test_old_server.png)
 
   - Kịch bản kiểm thử 2: tương tự như kịch bản 1 tuy nhiên cài tạo ra các lỗi khiến cho Database không hoạt động.
